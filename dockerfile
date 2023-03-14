@@ -2,32 +2,29 @@
 
 
 # Specify the parent image from which we build
-# Using image provided from steroLab devel verison for testing purposes 
-# Should be changed to runtime for final build 
 FROM stereolabs/zed:3.7-devel-jetson-jp4.6
 
 # OpenCV Version 
 ARG OPENCV_VERSION=4.x
 
-## Copys buildtime libs from host into docker image
-RUN rm -rf /usr/local/cuda-10.2/targets/aarch64-linux/lib/*
-COPY lib64/* /usr/local/cuda-10.2/targets/aarch64-linux/lib/
-
 # Install dependencies
-RUN apt-get update || true && apt-get upgrade -y &&\
+RUN apt-get update  
+RUN apt-get upgrade -y
     # Install build tools, build dependencies and python
-	apt-get install --no-install-recommends -y \
+    
+RUN apt-get install --no-install-recommends -y \
 	build-essential gcc g++ \
 	cmake git libgtk2.0-dev pkg-config libavcodec-dev libavformat-dev libswscale-dev \
 	libtbb2 libtbb-dev libjpeg-dev libpng-dev libtiff-dev \
-	yasm libatlas-base-dev gfortran libpq-dev \
-	libxine2-dev libglew-dev libtiff5-dev zlib1g-dev libavutil-dev libpostproc-dev \ 
-	libeigen3-dev python3-dev python3-pip python3-numpy libx11-dev tzdata \
-	&& rm -rf /var/lib/apt/lists/*
+    yasm libatlas-base-dev gfortran libpq-dev \
+    libxine2-dev libglew-dev libtiff5-dev zlib1g-dev libavutil-dev libpostproc-dev \ 
+    libeigen3-dev python3-dev python3-pip python3-numpy libx11-dev tzdata \
+&& rm -rf /var/lib/apt/lists/*
 
-##Pulled from zed sdk website to install opencv 
 # Set Working directory
 WORKDIR /opt
+
+
 # Install OpenCV from Source
 RUN git clone --depth 1 --branch ${OPENCV_VERSION} https://github.com/opencv/opencv.git && \
     git clone --depth 1 --branch ${OPENCV_VERSION} https://github.com/opencv/opencv_contrib.git && \
@@ -53,11 +50,6 @@ RUN git clone --depth 1 --branch ${OPENCV_VERSION} https://github.com/opencv/ope
 
 
 
-#WORKDIR /
-
-# CMD ["bash"]
-
-#Installs yaml-cpp by building from source in /opt Dir
 
 WORKDIR /opt 
 
@@ -71,6 +63,31 @@ RUN git clone https://github.com/jbeder/yaml-cpp.git && \
     make -j4 &&\
     make install &&\
     ldconfig
+
+
+
+RUN echo "Installing nlohmann_json"
+
+WORKDIR /opt
+
+RUN git clone https://github.com/nlohmann/json.git
+WORKDIR /opt/json
+RUN mkdir build && cd build && \
+    cmake -D CMAKE_BUILD_TYPE=Release .. &&\
+    sudo make install -j4
+
+WORKDIR /opt 
+RUN pip3 install --upgrade pip 
+RUN pip3 install cmake --upgrade 
+
+RUN git clone https://github.com/yhirose/cpp-httplib.git
+
+WORKDIR /opt/cpp-httplib
+
+RUN mkdir build && cd build &&\
+    cmake -D CMAKE_BUILD_TYPE=Release -D HTTPLIB_COMPILE=on -D BUILD_SHARED_LIBS=on .. && \
+    sudo cmake --build . --target install 
+
 
 ## Installs Ros noetic 
 # setup timezone
@@ -93,22 +110,32 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C1CF6E31E6
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
-ENV ROS_DISTRO melodic
+ENV ROS_DISTRO noetic  
 
 #install ros packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ros-melodic-ros-core=1.4.1-0* \
+    ros-noetic-ros-core=1.4.1-0* \
     && rm -rf /var/lib/apt/lists/*
 
 # setup entrypoint
 RUN rm -rf /ros_entrypoint.sh
 COPY ./ros_entrypoint.sh /
-RUN chmod +x /ros_entrypoint.sh
-
-ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD ["bash"]
-WORKDIR /opt
+ENTRYPOINT ["/ros_entrypoint.sh"]
+RUN mkdir -p /opt/catkin_ws/src
+WORKDIR /opt/catkin_ws
+RUN . /opt/ros/noetic/setup.sh && catkin_make 
+RUN apt update 
+RUN pip install -U rosdep 
+RUN rosdep init 
+RUN rosdep update 
 
 RUN echo "Installing Vision Module"
-RUN git clone https://github.com/stereolabs/zed-ros-wrapper.git 
-
+WORKDIR /opt/catkin_ws
+RUN cd ./src 
+RUN git clone --recursive https://github.com/stereolabs/zed-ros-wrapper.git
+RUN rm -rf /usr/local/cuda-10.2/targets/aarch64-linux/lib/*
+COPY lib64/* /usr/local/cuda-10.2/targets/aarch64-linux/lib/
+WORKDIR /opt/catkin_ws
+RUN rosdep install --from-paths src --ignore-src -r -y 
+RUN catkin_make -DCMAKE_BUILD_TYPE=Release
