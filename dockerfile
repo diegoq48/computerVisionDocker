@@ -2,7 +2,7 @@
 
 
 # Specify the parent image from which we build
-FROM stereolabs/zed:3.7-devel-jetson-jp4.6
+FROM stereolabs/zed:3.7-runtime-jetson-jp4.6
 
 # OpenCV Version 
 ARG OPENCV_VERSION=4.x
