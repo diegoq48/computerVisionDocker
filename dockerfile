@@ -130,6 +130,12 @@ RUN pip install -U rosdep
 RUN rosdep init 
 RUN rosdep update 
 
+## Installing wayfinder module
+
+COPY ./Wayfinder /opt 
+WORKDIR /opt/Wayfinder 
+RUN pip install .
+
 RUN echo "Installing Vision Module"
 WORKDIR /opt/catkin_ws
 RUN cd ./src 
